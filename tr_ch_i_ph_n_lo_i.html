@@ -1,0 +1,1085 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Chặng 3: Lần theo dấu vết ô nhiễm không khí</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #e6f2f5;
+            touch-action: pan-y; /* Cho phép cuộn dọc nhưng chặn zoom */
+            user-select: none;
+            overflow-x: hidden;
+        }
+        
+        /* Tùy chỉnh thanh cuộn */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+        .card-shadow { box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06); border-bottom-width: 4px; }
+        .card-active { border-color: #f59e0b !important; box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.3); transform: translateY(-2px); }
+        .folder-hover { border-color: #f59e0b !important; box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.3); background-color: #fef3c7 !important; }
+        
+        .header-bg { background: linear-gradient(to right, #87CEEB, #b0e0e6); }
+        
+        /* Hiệu ứng rung nhẹ khi kéo */
+        @keyframes wiggle {
+            0%, 100% { transform: rotate(-2deg); }
+            50% { transform: rotate(2deg); }
+        }
+        .dragging { opacity: 0.8; animation: wiggle 0.5s infinite; z-index: 50; }
+
+        #portrait-warning { display: none; }
+        @media screen and (orientation: portrait) and (max-width: 768px) {
+            #portrait-warning { display: flex; }
+        }
+    </style>
+</head>
+<body class="text-slate-800 h-screen flex flex-col overflow-hidden">
+
+    <!-- Cảnh báo dọc màn hình -->
+    <div id="portrait-warning" class="fixed inset-0 bg-slate-900/90 text-white z-[100] flex-col items-center justify-center p-6 text-center backdrop-blur-sm">
+        <i class="ph ph-device-rotate text-6xl mb-4 text-yellow-400"></i>
+        <h2 class="text-2xl font-bold mb-2">Vui lòng xoay ngang điện thoại!</h2>
+        <p class="text-slate-200 mb-6">Trò chơi thiết kế tối ưu cho màn hình ngang. Bạn vẫn có thể chơi dọc, nhưng xoay ngang sẽ dễ nhìn hơn nhiều.</p>
+        <button onclick="document.getElementById('portrait-warning').style.display='none'" class="bg-blue-500 hover:bg-blue-600 px-6 py-3 rounded-full font-bold shadow-lg">Tôi hiểu, tiếp tục</button>
+    </div>
+
+    <!-- MÀN HÌNH CHỜ (LOBBY) -->
+    <div id="lobby-screen" class="absolute inset-0 z-40 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] bg-[#e6f2f5] flex flex-col items-center justify-center p-4">
+        <div class="max-w-3xl w-full bg-white rounded-3xl shadow-2xl overflow-hidden border-4 border-slate-200">
+            <div class="bg-blue-600 text-white text-center py-6 px-4 relative">
+                <i class="ph-fill ph-detective text-5xl absolute left-4 top-1/2 -translate-y-1/2 opacity-20 md:opacity-100"></i>
+                <h2 class="text-xl font-bold text-blue-200 mb-1 tracking-wider">CHẶNG 3</h2>
+                <h1 class="text-2xl md:text-4xl font-extrabold uppercase drop-shadow-md">Lần theo dấu vết ô nhiễm không khí</h1>
+                <p class="mt-2 text-blue-100 font-medium">Vụ án: Bầu trời bị đánh cắp</p>
+                <i class="ph-fill ph-magnifying-glass text-5xl absolute right-4 top-1/2 -translate-y-1/2 opacity-20 md:opacity-100"></i>
+            </div>
+            
+            <div class="p-6 md:p-8">
+                <p class="text-center text-lg mb-6 font-medium">Chọn đội của bạn để bắt đầu điều tra:</p>
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8" id="team-selection">
+                    <!-- Nút đội tạo qua JS -->
+                </div>
+                
+                <div class="text-center mt-8 pt-6 border-t border-slate-200 flex justify-between items-center">
+                    <button id="btn-teacher-login" class="text-slate-400 hover:text-slate-600 text-sm flex items-center gap-1 transition-colors">
+                        <i class="ph ph-user-gear"></i> Giáo viên
+                    </button>
+                    <div id="connection-status" class="text-sm text-green-600 font-medium flex items-center gap-1">
+                        <i class="ph-fill ph-wifi-high"></i> Đang đồng bộ...
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MÀN HÌNH GIÁO VIÊN -->
+    <div id="teacher-screen" class="hidden absolute inset-0 z-50 bg-slate-100 flex flex-col p-4 md:p-8 overflow-y-auto">
+        <div class="max-w-5xl w-full mx-auto bg-white rounded-2xl shadow-xl p-6 border-2 border-slate-200">
+            <div class="flex justify-between items-center mb-6 pb-4 border-b">
+                <div>
+                    <h2 class="text-2xl font-bold text-blue-800">Bảng Điều Khiển Giáo Viên</h2>
+                    <p class="text-slate-500">Chặng 3: Phân loại nguyên nhân và hậu quả</p>
+                </div>
+                <button onclick="switchScreen('lobby')" class="bg-slate-200 hover:bg-slate-300 px-4 py-2 rounded-lg font-medium transition-colors">Đóng</button>
+            </div>
+
+            <div class="bg-blue-50 rounded-xl p-4 mb-6 border border-blue-100">
+                <h3 class="font-bold text-blue-800 mb-2">Trạng thái lượt thi: <span id="teacher-game-status" class="uppercase text-blue-600">Đang chờ</span></h3>
+                <div class="flex flex-wrap gap-3">
+                    <button id="btn-start-game" class="bg-green-500 hover:bg-green-600 text-white px-6 py-3 rounded-xl font-bold shadow-md opacity-50 cursor-not-allowed transition-all">Bắt đầu lượt thi</button>
+                    <button id="btn-end-game" class="bg-orange-500 hover:bg-orange-600 text-white px-6 py-3 rounded-xl font-bold shadow-md hidden transition-all">Kết thúc lượt thi</button>
+                    <button id="btn-reset-game" class="bg-red-500 hover:bg-red-600 text-white px-6 py-3 rounded-xl font-bold shadow-md ml-auto transition-all">Xóa & Tạo lượt mới</button>
+                </div>
+            </div>
+
+            <h3 class="text-lg font-bold mb-4">Tiến độ 4 Đội:</h3>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8" id="teacher-teams-status">
+                <!-- Tạo qua JS -->
+            </div>
+
+            <h3 class="text-lg font-bold mb-4">Bảng xếp hạng (Trực tiếp):</h3>
+            <div class="overflow-x-auto rounded-xl border border-slate-200">
+                <table class="w-full text-left bg-white">
+                    <thead class="bg-slate-100 text-slate-600">
+                        <tr>
+                            <th class="p-3 font-bold">Hạng</th>
+                            <th class="p-3 font-bold">Đội</th>
+                            <th class="p-3 font-bold text-center">Điểm</th>
+                            <th class="p-3 font-bold text-center">Tiến độ</th>
+                            <th class="p-3 font-bold text-center">Thời gian</th>
+                            <th class="p-3 font-bold text-right">Trạng thái</th>
+                        </tr>
+                    </thead>
+                    <tbody id="teacher-leaderboard" class="divide-y divide-slate-100">
+                        <!-- Tạo qua JS -->
+                    </tbody>
+                </table>
+            </div>
+            
+            <div class="mt-8 pt-6 border-t border-slate-200 text-sm text-slate-500">
+                <p><strong>Cách lấy đường dẫn chia sẻ:</strong> Copy đường dẫn (URL) ở thanh địa chỉ của trình duyệt phía trên. Đường dẫn này cố định cho bài học này. Thầy/Cô có thể tạo mã QR từ đường dẫn đó.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- MÀN HÌNH CHƠI CHÍNH -->
+    <div id="game-screen" class="hidden flex-col h-full bg-[#f8fafc]">
+        
+        <!-- Header Game -->
+        <div class="bg-[#fdf6e3] border-b-4 border-[#e2d8b5] p-2 md:p-3 flex justify-between items-center shrink-0 shadow-sm relative z-10">
+            <div class="flex items-center gap-2 bg-white px-3 md:px-5 py-1.5 md:py-2 rounded-full border-2 border-[#e2d8b5] shadow-sm">
+                <i class="ph-fill ph-users text-blue-600 text-lg md:text-xl"></i>
+                <span id="player-team-name" class="font-bold text-slate-700 text-sm md:text-base">Đội 1</span>
+            </div>
+            
+            <div class="flex items-center gap-2 bg-white px-4 md:px-6 py-1.5 md:py-2 rounded-full border-2 border-[#e2d8b5] shadow-sm text-red-600 font-black text-lg md:text-2xl">
+                <i class="ph-fill ph-clock"></i>
+                <span id="game-timer">00:00</span>
+            </div>
+            
+            <div class="flex items-center gap-2">
+                <div class="hidden md:flex items-center gap-2 bg-white px-4 py-2 rounded-full border-2 border-[#e2d8b5] shadow-sm">
+                    <i class="ph-fill ph-files text-slate-500 text-xl"></i>
+                    <span class="font-bold text-slate-700 text-sm">Đã xử lí: <span id="game-progress" class="text-blue-600">0/11</span></span>
+                </div>
+                <button id="btn-sound" class="bg-white hover:bg-slate-100 p-2 md:p-2.5 rounded-full border-2 border-[#e2d8b5] shadow-sm text-slate-600 transition-colors">
+                    <i class="ph-fill ph-speaker-high text-xl"></i>
+                </button>
+            </div>
+        </div>
+        
+        <!-- Mobile Progress Bar -->
+        <div class="md:hidden bg-white px-3 py-2 border-b flex justify-between items-center text-sm font-bold shrink-0">
+            <span>Tiến độ: <span id="game-progress-mobile" class="text-blue-600">0/11</span></span>
+            <span class="text-slate-500 text-xs font-normal italic">Chạm thẻ rồi chạm hồ sơ</span>
+        </div>
+
+        <div class="flex-1 flex flex-col overflow-hidden relative">
+            <!-- Khu vực 3 Hồ sơ -->
+            <div class="flex-none p-2 md:p-4 grid grid-cols-3 gap-2 md:gap-6 bg-[url('https://www.transparenttextures.com/patterns/clean-textile.png')]">
+                
+                <!-- Hồ sơ Tự nhiên -->
+                <div class="folder-zone flex flex-col bg-[#f0fdf4] border-4 border-[#4ade80] rounded-xl md:rounded-2xl overflow-hidden shadow-md transition-all relative" data-target="natural" onclick="handleFolderClick('natural')">
+                    <div class="bg-[#4ade80] text-white text-center py-1.5 md:py-2 px-1 text-xs md:text-sm font-bold truncate uppercase flex items-center justify-center gap-1">
+                        <i class="ph-fill ph-mountains hidden md:block text-lg"></i> TỪ TỰ NHIÊN
+                    </div>
+                    <div class="flex-1 p-2 flex flex-col items-center justify-center border-4 border-dashed border-[#bbf7d0] m-1 md:m-2 rounded-lg bg-white/50 relative">
+                        <span class="text-[#4ade80] text-[10px] md:text-sm font-medium text-center pointer-events-none drop-hint">Thả thẻ vào đây</span>
+                        <div class="absolute top-1 left-1 right-1 flex flex-wrap gap-1 folder-content pointer-events-none" id="folder-natural"></div>
+                    </div>
+                </div>
+
+                <!-- Hồ sơ Con người -->
+                <div class="folder-zone flex flex-col bg-[#eff6ff] border-4 border-[#60a5fa] rounded-xl md:rounded-2xl overflow-hidden shadow-md transition-all relative" data-target="human" onclick="handleFolderClick('human')">
+                    <div class="bg-[#60a5fa] text-white text-center py-1.5 md:py-2 px-1 text-xs md:text-sm font-bold truncate uppercase flex items-center justify-center gap-1">
+                        <i class="ph-fill ph-factory hidden md:block text-lg"></i> TỪ CON NGƯỜI
+                    </div>
+                    <div class="flex-1 p-2 flex flex-col items-center justify-center border-4 border-dashed border-[#bfdbfe] m-1 md:m-2 rounded-lg bg-white/50 relative">
+                        <span class="text-[#60a5fa] text-[10px] md:text-sm font-medium text-center pointer-events-none drop-hint">Thả thẻ vào đây</span>
+                        <div class="absolute top-1 left-1 right-1 flex flex-wrap gap-1 folder-content pointer-events-none" id="folder-human"></div>
+                    </div>
+                </div>
+
+                <!-- Hồ sơ Hậu quả -->
+                <div class="folder-zone flex flex-col bg-[#fff7ed] border-4 border-[#fb923c] rounded-xl md:rounded-2xl overflow-hidden shadow-md transition-all relative" data-target="consequence" onclick="handleFolderClick('consequence')">
+                    <div class="bg-[#fb923c] text-white text-center py-1.5 md:py-2 px-1 text-[10px] md:text-sm font-bold truncate uppercase flex items-center justify-center gap-1">
+                        <i class="ph-fill ph-leaf hidden md:block text-lg"></i> HẬU QUẢ
+                    </div>
+                    <div class="flex-1 p-2 flex flex-col items-center justify-center border-4 border-dashed border-[#fed7aa] m-1 md:m-2 rounded-lg bg-white/50 relative">
+                        <span class="text-[#fb923c] text-[10px] md:text-sm font-medium text-center pointer-events-none drop-hint">Thả thẻ vào đây</span>
+                        <div class="absolute top-1 left-1 right-1 flex flex-wrap gap-1 folder-content pointer-events-none" id="folder-consequence"></div>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- Khu vực Bằng chứng (có thể cuộn) -->
+            <div class="flex-1 overflow-y-auto p-2 md:p-6 bg-slate-100/50">
+                <div class="max-w-6xl mx-auto">
+                    <div class="flex items-center gap-2 mb-3 md:mb-4 text-slate-500 font-medium text-xs md:text-sm bg-white w-fit px-4 py-1.5 rounded-full mx-auto shadow-sm">
+                        <i class="ph-fill ph-folder-open text-blue-500 text-lg"></i>
+                        <span>Kéo thẻ vào hồ sơ, hoặc chạm thẻ rồi chạm hồ sơ. (B = Bằng chứng)</span>
+                    </div>
+                    
+                    <!-- Lưới chứa thẻ -->
+                    <div id="cards-container" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2 md:gap-4 pb-10">
+                        <!-- Thẻ tạo bằng JS -->
+                    </div>
+                </div>
+            </div>
+            
+        </div>
+    </div>
+
+    <!-- MODAL XÁC NHẬN CHUNG -->
+    <div id="custom-modal" class="hidden fixed inset-0 z-[60] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden transform scale-95 transition-transform" id="modal-content">
+            <div class="p-6 md:p-8 text-center">
+                <div id="modal-icon" class="text-5xl mb-4">🤔</div>
+                <h3 id="modal-title" class="text-xl md:text-2xl font-bold mb-2 text-slate-800">Tiêu đề</h3>
+                <p id="modal-desc" class="text-slate-600 mb-6 font-medium">Nội dung mô tả.</p>
+                <div id="modal-extra" class="bg-slate-50 rounded-lg p-3 text-sm text-slate-700 text-left mb-6 border hidden"></div>
+                
+                <div id="modal-buttons" class="flex gap-3 justify-center">
+                    <!-- Nút tạo động -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MÀN HÌNH KẾT THÚC / BẢNG XẾP HẠNG -->
+    <div id="end-screen" class="hidden absolute inset-0 z-50 bg-slate-900/90 backdrop-blur-md flex flex-col items-center justify-center p-4">
+        <div class="bg-white rounded-3xl shadow-2xl max-w-3xl w-full p-6 md:p-10 border-4 border-yellow-400 relative overflow-hidden">
+            <!-- Hiệu ứng pháo giấy bằng CSS (đơn giản) -->
+            <div class="absolute inset-0 pointer-events-none opacity-20 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')]"></div>
+            
+            <div class="text-center relative z-10 mb-8">
+                <i class="ph-fill ph-trophy text-6xl text-yellow-500 mb-2"></i>
+                <h2 class="text-3xl md:text-4xl font-black text-slate-800 mb-2 uppercase">Hoàn Thành Điều Tra!</h2>
+                <div class="flex justify-center items-center gap-6 mt-4">
+                    <div class="text-center bg-blue-50 px-6 py-3 rounded-2xl border-2 border-blue-200">
+                        <p class="text-sm text-blue-600 font-bold uppercase mb-1">Điểm của đội</p>
+                        <p class="text-3xl font-black text-blue-700"><span id="final-score">0</span>/11</p>
+                    </div>
+                    <div class="text-center bg-orange-50 px-6 py-3 rounded-2xl border-2 border-orange-200">
+                        <p class="text-sm text-orange-600 font-bold uppercase mb-1">Thời gian</p>
+                        <p class="text-3xl font-black text-orange-700" id="final-time">00:00</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="relative z-10 bg-slate-50 rounded-2xl p-4 border border-slate-200">
+                <h3 class="text-center font-bold text-slate-700 mb-4 text-lg">BẢNG XẾP HẠNG CHUNG</h3>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left">
+                        <thead class="bg-slate-200 text-slate-600 text-sm uppercase">
+                            <tr>
+                                <th class="p-3 font-bold rounded-tl-lg">Hạng</th>
+                                <th class="p-3 font-bold">Đội</th>
+                                <th class="p-3 font-bold text-center">Điểm</th>
+                                <th class="p-3 font-bold text-center rounded-tr-lg">Thời gian</th>
+                            </tr>
+                        </thead>
+                        <tbody id="final-leaderboard" class="divide-y divide-slate-100 font-medium">
+                            <!-- JS gen -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            
+            <div class="text-center mt-6 text-slate-500 text-sm font-medium">
+                Đang chờ giáo viên bắt đầu lượt mới...
+            </div>
+        </div>
+    </div>
+
+
+<!-- FIREBASE IMPORTS (v11.6.1 theo yêu cầu) -->
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+import { getFirestore, doc, getDoc, setDoc, onSnapshot, updateDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+// Lấy config từ môi trường Canvas
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
+    // Fallback rỗng để tránh lỗi cú pháp, Canvas sẽ tiêm thật vào
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+const auth = getAuth(app);
+let userId = null;
+
+// Tham chiếu đến document lưu trạng thái game chung (Rule 1: Strict Paths)
+const SESSION_DOC_PATH = doc(db, 'artifacts', appId, 'public', 'data', 'games', 'current_session');
+
+// --- CẤU TRÚC DỮ LIỆU ---
+const FOLDERS = {
+    'natural': { id: 'natural', name: 'Nguyên nhân tự nhiên' },
+    'human': { id: 'human', name: 'Nguyên nhân con người' },
+    'consequence': { id: 'consequence', name: 'Hậu quả ô nhiễm' }
+};
+
+const CARDS_DATA = [
+    { id: 'B01', text: 'Đốt rác ngoài trời', ans: 'human', exp: 'Đốt rác ngoài trời phát sinh khói, bụi và các chất gây ô nhiễm.', icon: '🔥' },
+    { id: 'B02', text: 'Gây hại sức khỏe, đặc biệt là hệ hô hấp', ans: 'consequence', exp: 'Đây là tác động của ô nhiễm không khí đến sức khỏe, nên thuộc nhóm hậu quả.', icon: '😷' },
+    { id: 'B03', text: 'Núi lửa phun trào', ans: 'natural', exp: 'Núi lửa phun trào có thể đưa tro, bụi và khí vào không khí.', icon: '🌋' },
+    { id: 'B04', text: 'Bụi từ hoạt động xây dựng', ans: 'human', exp: 'Hoạt động xây dựng của con người có thể phát sinh bụi vào không khí.', icon: '🏗️' },
+    { id: 'B05', text: 'Góp phần gây mưa acid, làm hại sinh vật và công trình', ans: 'consequence', exp: 'Một số khí thải có thể góp phần tạo mưa acid, gây hại sinh vật và công trình.', icon: '🌧️' },
+    { id: 'B06', text: 'Bão bụi cuốn bụi vào không khí', ans: 'natural', exp: 'Gió mạnh trong bão bụi có thể cuốn nhiều bụi từ mặt đất vào không khí.', icon: '🌪️' },
+    { id: 'B07', text: 'Khí thải từ phương tiện giao thông', ans: 'human', exp: 'Các phương tiện sử dụng nhiên liệu đốt có thể phát sinh khí thải gây ô nhiễm.', icon: '🚗' },
+    { id: 'B08', text: 'Gia tăng khí nhà kính, góp phần làm Trái Đất nóng lên', ans: 'consequence', exp: 'Sự gia tăng khí nhà kính làm tăng hiệu ứng nhà kính, góp phần làm Trái Đất nóng lên.', icon: '🌍' },
+    { id: 'B09', text: 'Cháy rừng do sét đánh', ans: 'natural', exp: 'Trong tình huống này, cháy rừng bắt nguồn từ sét, nên được xếp vào nguồn từ tự nhiên.', icon: '⚡' },
+    { id: 'B10', text: 'Có thể làm giảm khả năng quang hợp của cây', ans: 'consequence', exp: 'Một số chất ô nhiễm có thể làm giảm khả năng quang hợp và ảnh hưởng sự sinh trưởng của cây.', icon: '🍂' },
+    { id: 'B11', text: 'Khí thải sản xuất chưa được xử lí phù hợp', ans: 'human', exp: 'Khí thải từ hoạt động sản xuất có thể gây ô nhiễm nếu chưa được xử lí phù hợp.', icon: '🏭' }
+];
+
+// --- TRẠNG THÁI LOCAL ---
+let localState = {
+    role: null, // 'student' | 'teacher'
+    teamId: null, // 'team1', 'team2', 'team3', 'team4'
+    activeCardId: null, // ID thẻ đang được chọn (để click to drop)
+    processedCards: [], // ['B01', 'B02'] lưu ở local để ẩn thẻ khỏi giao diện
+    soundEnabled: true,
+    timerInterval: null
+};
+
+// Trạng thái đồng bộ từ Firebase
+let globalGameState = null;
+
+// --- ÂM THANH (Web Audio API - không phụ thuộc file ngoài) ---
+const AudioContext = window.AudioContext || window.webkitAudioContext;
+const audioCtx = new AudioContext();
+
+function playTone(freq, type, duration, vol=0.1) {
+    if (!localState.soundEnabled || audioCtx.state === 'suspended') return;
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+    gain.gain.setValueAtTime(vol, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + duration);
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.start();
+    osc.stop(audioCtx.currentTime + duration);
+}
+const sounds = {
+    click: () => playTone(600, 'sine', 0.1, 0.05),
+    drop: () => playTone(400, 'triangle', 0.1, 0.05),
+    correct: () => { playTone(523.25, 'sine', 0.1); setTimeout(() => playTone(659.25, 'sine', 0.2), 100); },
+    wrong: () => playTone(150, 'sawtooth', 0.3, 0.1),
+    win: () => { 
+        [523.25, 659.25, 783.99, 1046.50].forEach((f, i) => setTimeout(() => playTone(f, 'square', 0.2, 0.05), i*150));
+    }
+};
+
+// Yêu cầu tương tác để mở Web Audio
+document.body.addEventListener('click', () => { if(audioCtx.state === 'suspended') audioCtx.resume(); }, {once:true});
+document.getElementById('btn-sound').addEventListener('click', () => {
+    localState.soundEnabled = !localState.soundEnabled;
+    document.getElementById('btn-sound').innerHTML = localState.soundEnabled ? '<i class="ph-fill ph-speaker-high text-xl"></i>' : '<i class="ph-fill ph-speaker-slash text-xl text-red-500"></i>';
+});
+
+
+// --- INIT FIREBASE (Rule 3) ---
+async function initApp() {
+    try {
+        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+            await signInWithCustomToken(auth, __initial_auth_token);
+        } else {
+            await signInAnonymously(auth);
+        }
+        userId = auth.currentUser.uid;
+        setupRealtimeListener();
+    } catch (e) {
+        console.error("Auth error:", e);
+        document.getElementById('connection-status').innerHTML = '<i class="ph-fill ph-warning-circle text-red-500"></i> Lỗi kết nối';
+    }
+}
+
+// Khởi tạo Document nếu chưa có
+async function ensureSessionExists() {
+    if (!userId) return;
+    const docSnap = await getDoc(SESSION_DOC_PATH);
+    if (!docSnap.exists()) {
+        const initialState = {
+            status: 'waiting', // waiting, playing, finished
+            startTime: null,
+            teams: {
+                team1: { name: 'Đội 1', joined: false, uid: null, score: 0, progress: 0, status: 'waiting', time: 0 },
+                team2: { name: 'Đội 2', joined: false, uid: null, score: 0, progress: 0, status: 'waiting', time: 0 },
+                team3: { name: 'Đội 3', joined: false, uid: null, score: 0, progress: 0, status: 'waiting', time: 0 },
+                team4: { name: 'Đội 4', joined: false, uid: null, score: 0, progress: 0, status: 'waiting', time: 0 }
+            }
+        };
+        await setDoc(SESSION_DOC_PATH, initialState);
+    }
+}
+
+// Lắng nghe thay đổi
+function setupRealtimeListener() {
+    ensureSessionExists();
+    onSnapshot(SESSION_DOC_PATH, (docSnap) => {
+        if (docSnap.exists()) {
+            globalGameState = docSnap.data();
+            updateUIFromState();
+        }
+    }, (error) => {
+        console.error("Lỗi đồng bộ:", error);
+        document.getElementById('connection-status').innerHTML = '<i class="ph-fill ph-warning-circle text-red-500"></i> Mất kết nối';
+    });
+}
+
+// --- HÀM CẬP NHẬT UI CHÍNH ---
+function updateUIFromState() {
+    if (!globalGameState) return;
+
+    // 1. Cập nhật Lobby (Màn hình chọn đội)
+    const teamSelectionDiv = document.getElementById('team-selection');
+    teamSelectionDiv.innerHTML = '';
+    
+    ['team1', 'team2', 'team3', 'team4'].forEach(tId => {
+        const teamData = globalGameState.teams[tId];
+        const btn = document.createElement('button');
+        
+        // Nếu đã có người chiếm đội này và KHÔNG PHẢI là thiết bị này
+        const isTakenByOther = teamData.joined && teamData.uid !== userId;
+        const isMine = teamData.joined && teamData.uid === userId;
+
+        btn.className = `p-4 rounded-2xl border-4 font-bold text-lg flex flex-col items-center gap-2 transition-all ${
+            isMine ? 'bg-blue-100 border-blue-500 text-blue-700' :
+            isTakenByOther ? 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed opacity-60' :
+            'bg-white border-slate-200 text-slate-700 hover:border-blue-300 hover:shadow-md'
+        }`;
+        
+        btn.innerHTML = `
+            <i class="ph-fill ph-${tId.replace('team','') === '1' ? 'detective' : tId.replace('team','') === '2' ? 'users' : tId.replace('team','') === '3' ? 'magnifying-glass' : 'footprints'} text-3xl"></i>
+            <span>Đội ${tId.replace('team', '')}</span>
+            <span class="text-xs font-normal">${isMine ? '(Bạn)' : isTakenByOther ? 'Đã tham gia' : 'Trống'}</span>
+        `;
+
+        if (!isTakenByOther) {
+            btn.onclick = () => joinTeam(tId);
+        }
+        teamSelectionDiv.appendChild(btn);
+    });
+
+    // Cập nhật trạng thái kết nối
+    document.getElementById('connection-status').innerHTML = '<i class="ph-fill ph-check-circle text-green-500"></i> Đã đồng bộ';
+
+    // 2. Chuyển hướng màn hình dựa trên trạng thái chung và local
+    if (localState.role === 'teacher') {
+        renderTeacherDashboard();
+    } else if (localState.role === 'student' && localState.teamId) {
+        
+        const myTeamGlobal = globalGameState.teams[localState.teamId];
+        // Nếu bị kick (reset game)
+        if (!myTeamGlobal.joined || myTeamGlobal.uid !== userId) {
+            resetLocalStudentState();
+            switchScreen('lobby');
+            showCustomModal("Lượt thi mới", "Giáo viên đã làm mới lượt thi.", [{text:"Đóng"}]);
+            return;
+        }
+
+        if (globalGameState.status === 'playing') {
+            if (myTeamGlobal.status === 'finished') {
+                renderEndScreen();
+            } else {
+                switchScreen('game');
+                startTimerDisplay();
+                updateProgressUI(myTeamGlobal.progress);
+            }
+        } else if (globalGameState.status === 'waiting') {
+            switchScreen('lobby');
+            document.getElementById('connection-status').innerHTML = '<span class="text-blue-600 font-bold"><i class="ph-fill ph-hourglass"></i> Đang chờ giáo viên bắt đầu...</span>';
+        } else if (globalGameState.status === 'finished') {
+            renderEndScreen();
+        }
+    }
+}
+
+// --- LOGIC HỌC SINH ---
+async function joinTeam(tId) {
+    if (!userId || globalGameState.status !== 'waiting') return;
+    
+    // Rời đội cũ nếu có
+    const updates = {};
+    if (localState.teamId) {
+        updates[`teams.${localState.teamId}.joined`] = false;
+        updates[`teams.${localState.teamId}.uid`] = null;
+    }
+    
+    updates[`teams.${tId}.joined`] = true;
+    updates[`teams.${tId}.uid`] = userId;
+    updates[`teams.${tId}.status`] = 'ready'; // Tự động ready khi chọn
+    
+    try {
+        await updateDoc(SESSION_DOC_PATH, updates);
+        localState.role = 'student';
+        localState.teamId = tId;
+        document.getElementById('player-team-name').innerText = globalGameState.teams[tId].name;
+        sounds.click();
+        
+        // Render thẻ lần đầu
+        renderCards();
+    } catch (e) {
+        console.error("Lỗi join team:", e);
+    }
+}
+
+function resetLocalStudentState() {
+    localState.role = null;
+    localState.teamId = null;
+    localState.processedCards = [];
+    localState.activeCardId = null;
+    if(localState.timerInterval) clearInterval(localState.timerInterval);
+    
+    // Clear folders UI
+    document.getElementById('folder-natural').innerHTML = '';
+    document.getElementById('folder-human').innerHTML = '';
+    document.getElementById('folder-consequence').innerHTML = '';
+}
+
+// Sinh giao diện thẻ bằng chứng
+function renderCards() {
+    const container = document.getElementById('cards-container');
+    container.innerHTML = '';
+    
+    // Lọc bỏ thẻ đã xử lí
+    const remainingCards = CARDS_DATA.filter(c => !localState.processedCards.includes(c.id));
+    
+    remainingCards.forEach(card => {
+        const el = document.createElement('div');
+        el.className = 'bg-white rounded-xl card-shadow p-3 md:p-4 cursor-pointer flex flex-col items-center text-center transition-all border-2 border-transparent hover:border-blue-200 select-none';
+        el.draggable = true;
+        el.id = `card-${card.id}`;
+        
+        el.innerHTML = `
+            <div class="bg-blue-100 text-blue-800 text-[10px] md:text-xs font-bold px-2 py-0.5 rounded absolute top-2 left-2">${card.id}</div>
+            <div class="text-3xl md:text-4xl mb-2 mt-3">${card.icon}</div>
+            <div class="text-xs md:text-sm font-medium text-slate-700 leading-tight">${card.text}</div>
+        `;
+
+        // Sự kiện chạm/Click
+        el.onclick = () => handleCardClick(card.id, el);
+        
+        // Sự kiện Kéo thả (Desktop)
+        el.addEventListener('dragstart', (e) => {
+            localState.activeCardId = card.id;
+            e.dataTransfer.setData('text/plain', card.id);
+            el.classList.add('dragging');
+            document.querySelectorAll('.drop-hint').forEach(h => h.style.opacity = '1');
+            sounds.click();
+        });
+        el.addEventListener('dragend', () => {
+            el.classList.remove('dragging');
+            document.querySelectorAll('.drop-hint').forEach(h => h.style.opacity = '0.5');
+        });
+
+        container.appendChild(el);
+    });
+}
+
+// Xử lý Click Thẻ
+function handleCardClick(id, el) {
+    sounds.click();
+    if (localState.activeCardId === id) {
+        // Deselect
+        localState.activeCardId = null;
+        el.classList.remove('card-active');
+    } else {
+        // Select mới
+        document.querySelectorAll('#cards-container > div').forEach(d => d.classList.remove('card-active'));
+        localState.activeCardId = id;
+        el.classList.add('card-active');
+    }
+}
+
+// Xử lý Thả/Click vào Hồ sơ
+function handleFolderClick(folderId) {
+    if (!localState.activeCardId) return; // Chưa chọn thẻ nào
+    processCardDrop(localState.activeCardId, folderId);
+}
+
+// Thiết lập Drop Zones
+document.querySelectorAll('.folder-zone').forEach(zone => {
+    zone.addEventListener('dragover', (e) => {
+        e.preventDefault(); // Cho phép drop
+        zone.classList.add('folder-hover');
+    });
+    zone.addEventListener('dragleave', () => {
+        zone.classList.remove('folder-hover');
+    });
+    zone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        zone.classList.remove('folder-hover');
+        const cardId = e.dataTransfer.getData('text/plain');
+        const folderId = zone.getAttribute('data-target');
+        if (cardId && folderId) {
+            processCardDrop(cardId, folderId);
+        }
+    });
+});
+
+// Xử lý logic khi thẻ vào hồ sơ
+function processCardDrop(cardId, folderId) {
+    const cardInfo = CARDS_DATA.find(c => c.id === cardId);
+    if (!cardInfo) return;
+
+    sounds.drop();
+
+    showCustomModal(
+        "Xác nhận phân loại",
+        `Đưa bằng chứng <b>${cardId}</b> vào hồ sơ <br/><span class="text-lg font-bold text-blue-600 uppercase">${FOLDERS[folderId].name}</span>?`,
+        [
+            { text: "Chọn lại", class: "bg-slate-200 text-slate-700 hover:bg-slate-300", action: () => closeCustomModal() },
+            { text: "Xác nhận", class: "bg-blue-600 text-white hover:bg-blue-700 font-bold", action: () => confirmCard(cardInfo, folderId) }
+        ]
+    );
+}
+
+async function confirmCard(card, selectedFolderId) {
+    if(!userId) return;
+    closeCustomModal();
+    
+    const isCorrect = card.ans === selectedFolderId;
+    const myTeam = globalGameState.teams[localState.teamId];
+    
+    // Tạo cập nhật
+    const updates = {};
+    const newProgress = myTeam.progress + 1;
+    updates[`teams.${localState.teamId}.progress`] = newProgress;
+    
+    let newScore = myTeam.score;
+    if (isCorrect) {
+        newScore += 1;
+        updates[`teams.${localState.teamId}.score`] = newScore;
+        sounds.correct();
+    } else {
+        sounds.wrong();
+    }
+
+    // Nếu là câu cuối cùng (11), chốt thời gian
+    if (newProgress >= 11) {
+        updates[`teams.${localState.teamId}.status`] = 'finished';
+        const timeTaken = Math.floor((Date.now() - globalGameState.startTime) / 1000);
+        updates[`teams.${localState.teamId}.time`] = timeTaken;
+    }
+
+    try {
+        await updateDoc(SESSION_DOC_PATH, updates);
+        
+        // UI Local Update
+        localState.processedCards.push(card.id);
+        localState.activeCardId = null;
+        
+        // Thêm nhãn nhỏ vào hồ sơ (Luôn vào hồ sơ ĐÚNG dù chọn sai)
+        const targetFolderDiv = document.getElementById(`folder-${card.ans}`);
+        const tag = document.createElement('div');
+        tag.className = `text-[10px] md:text-xs font-bold px-1.5 py-0.5 rounded border shadow-sm ${isCorrect ? 'bg-green-100 text-green-700 border-green-300' : 'bg-red-100 text-red-700 border-red-300'}`;
+        tag.innerHTML = `${card.id} ${isCorrect ? '✓' : '✗'}`;
+        targetFolderDiv.appendChild(tag);
+        
+        renderCards(); // Render lại khu vực dưới
+
+        // Hiển thị phản hồi
+        showFeedback(card, isCorrect);
+        
+        if (newProgress >= 11) {
+             setTimeout(() => { sounds.win(); }, 1000);
+        }
+        
+    } catch (e) {
+        console.error("Lỗi cập nhật điểm:", e);
+        showCustomModal("Lỗi mạng", "Đang thử lại. Kết quả chưa được lưu.", [{text: "Đóng"}]);
+    }
+}
+
+function showFeedback(card, isCorrect) {
+    const title = isCorrect ? 'Chính xác! +1 điểm' : 'Chưa chính xác';
+    const icon = isCorrect ? '🌟' : '❌';
+    const titleClass = isCorrect ? 'text-green-600 text-2xl font-bold' : 'text-red-600 text-xl font-bold';
+    
+    let desc = isCorrect 
+        ? `Bằng chứng <b>${card.id}</b> thuộc <b>${FOLDERS[card.ans].name}</b>.` 
+        : `Bằng chứng <b>${card.id}</b> phải thuộc <b>${FOLDERS[card.ans].name}</b>.<br><span class="text-sm text-slate-500">(Thẻ đã được chuyển về đúng hồ sơ, không được cộng điểm)</span>`;
+
+    const extra = `<b>Giải thích:</b> ${card.exp}`;
+
+    showCustomModal(
+        `<span class="${titleClass}">${title}</span>`,
+        desc,
+        [{ text: "Tiếp tục", class: "bg-blue-600 text-white font-bold px-6", action: () => closeCustomModal() }],
+        icon,
+        extra
+    );
+}
+
+function updateProgressUI(prog) {
+    document.getElementById('game-progress').innerText = `${prog}/11`;
+    document.getElementById('game-progress-mobile').innerText = `${prog}/11`;
+}
+
+function startTimerDisplay() {
+    if(localState.timerInterval) clearInterval(localState.timerInterval);
+    
+    const updateTime = () => {
+        if (!globalGameState || !globalGameState.startTime) return;
+        const myTeam = globalGameState.teams[localState.teamId];
+        
+        let elapsed = 0;
+        if (myTeam.status === 'finished') {
+            elapsed = myTeam.time;
+            clearInterval(localState.timerInterval); // Dừng UI timer
+        } else if (globalGameState.status === 'playing') {
+            elapsed = Math.floor((Date.now() - globalGameState.startTime) / 1000);
+            if(elapsed < 0) elapsed = 0;
+        }
+
+        const mins = String(Math.floor(elapsed / 60)).padStart(2, '0');
+        const secs = String(elapsed % 60).padStart(2, '0');
+        document.getElementById('game-timer').innerText = `${mins}:${secs}`;
+    };
+    
+    updateTime(); // chạy ngay
+    localState.timerInterval = setInterval(updateTime, 1000);
+}
+
+// --- LOGIC GIÁO VIÊN ---
+
+document.getElementById('btn-teacher-login').onclick = () => {
+    // Basic password modal
+    document.getElementById('modal-extra').classList.add('hidden');
+    document.getElementById('modal-icon').innerHTML = '🔒';
+    document.getElementById('modal-title').innerHTML = 'Đăng nhập Giáo viên';
+    document.getElementById('modal-desc').innerHTML = '<input type="password" id="teacher-pwd" class="border-2 border-slate-300 rounded p-2 text-center w-full focus:border-blue-500 outline-none" placeholder="Nhập mật khẩu">';
+    
+    document.getElementById('modal-buttons').innerHTML = '';
+    
+    const btnCancel = document.createElement('button');
+    btnCancel.className = "bg-slate-200 text-slate-700 px-4 py-2 rounded font-medium hover:bg-slate-300";
+    btnCancel.innerText = "Hủy";
+    btnCancel.onclick = closeCustomModal;
+
+    const btnLogin = document.createElement('button');
+    btnLogin.className = "bg-blue-600 text-white px-4 py-2 rounded font-bold hover:bg-blue-700";
+    btnLogin.innerText = "Vào";
+    btnLogin.onclick = () => {
+        const pwd = document.getElementById('teacher-pwd').value;
+        if (pwd === "Giaovien123") {
+            localState.role = 'teacher';
+            closeCustomModal();
+            updateUIFromState(); // Render lại màn hình GV
+        } else {
+            document.getElementById('modal-desc').innerHTML += '<p class="text-red-500 text-sm mt-2">Mật khẩu chưa đúng.</p>';
+        }
+    };
+    
+    document.getElementById('modal-buttons').appendChild(btnCancel);
+    document.getElementById('modal-buttons').appendChild(btnLogin);
+    
+    document.getElementById('custom-modal').classList.remove('hidden');
+};
+
+function renderTeacherDashboard() {
+    switchScreen('teacher');
+    if (!globalGameState) return;
+
+    const st = globalGameState.status;
+    const statusEl = document.getElementById('teacher-game-status');
+    const btnStart = document.getElementById('btn-start-game');
+    const btnEnd = document.getElementById('btn-end-game');
+
+    if (st === 'waiting') {
+        statusEl.innerText = "Đang chờ đội vào...";
+        statusEl.className = "uppercase text-orange-500";
+        btnStart.classList.remove('hidden');
+        btnEnd.classList.add('hidden');
+        
+        // Kích hoạt nút start nếu có ít nhất 1 đội
+        const hasTeams = Object.values(globalGameState.teams).some(t => t.joined);
+        if (hasTeams) {
+            btnStart.classList.remove('opacity-50', 'cursor-not-allowed');
+            btnStart.onclick = startGame;
+        } else {
+            btnStart.classList.add('opacity-50', 'cursor-not-allowed');
+            btnStart.onclick = null;
+        }
+    } else if (st === 'playing') {
+        statusEl.innerText = "Đang diễn ra";
+        statusEl.className = "uppercase text-green-600 animate-pulse";
+        btnStart.classList.add('hidden');
+        btnEnd.classList.remove('hidden');
+        btnEnd.onclick = confirmEndGame;
+    } else {
+        statusEl.innerText = "Đã kết thúc";
+        statusEl.className = "uppercase text-slate-500";
+        btnStart.classList.add('hidden');
+        btnEnd.classList.add('hidden');
+    }
+
+    // Render Teams Status Cards
+    const teamsContainer = document.getElementById('teacher-teams-status');
+    teamsContainer.innerHTML = '';
+    
+    let allFinished = true;
+    let anyJoined = false;
+
+    Object.keys(globalGameState.teams).forEach(tId => {
+        const t = globalGameState.teams[tId];
+        const el = document.createElement('div');
+        
+        if (t.joined) anyJoined = true;
+        if (t.joined && t.status !== 'finished') allFinished = false;
+
+        el.className = `p-4 rounded-xl border-2 ${
+            !t.joined ? 'bg-slate-50 border-slate-200 opacity-60' : 
+            t.status === 'finished' ? 'bg-green-50 border-green-400' : 'bg-blue-50 border-blue-400'
+        }`;
+        
+        el.innerHTML = `
+            <div class="font-bold text-lg mb-1">${t.name}</div>
+            <div class="text-sm font-medium ${!t.joined ? 'text-slate-400' : t.status==='finished' ? 'text-green-600' : 'text-blue-600'}">
+                ${!t.joined ? 'Chưa tham gia' : t.status === 'finished' ? 'Hoàn thành' : 'Đang điều tra'}
+            </div>
+            ${t.joined ? `<div class="mt-2 text-xs font-bold text-slate-500 bg-white rounded py-1 px-2 inline-block shadow-sm">Tiến độ: ${t.progress}/11</div>` : ''}
+        `;
+        teamsContainer.appendChild(el);
+    });
+
+    // Auto end game nếu tất cả đã xong
+    if (st === 'playing' && anyJoined && allFinished) {
+        endGame(false); // End automatically
+    }
+
+    // Render Leaderboard (Giáo viên)
+    renderLeaderboard('teacher-leaderboard');
+    
+    // Nút Reset
+    document.getElementById('btn-reset-game').onclick = promptResetGame;
+}
+
+async function startGame() {
+    if(!userId) return;
+    try {
+        await updateDoc(SESSION_DOC_PATH, {
+            status: 'playing',
+            startTime: Date.now() // Lấy mốc thời gian từ máy giáo viên
+        });
+    } catch(e) { console.error(e); }
+}
+
+function confirmEndGame() {
+    showCustomModal("Chốt kết quả", "Bạn có chắc muốn kết thúc lượt thi ngay? Các đội chưa hoàn thành sẽ bị chốt điểm hiện tại.", [
+        { text: "Hủy", class: "bg-slate-200 text-slate-700 hover:bg-slate-300", action: () => closeCustomModal() },
+        { text: "Kết thúc", class: "bg-orange-500 text-white hover:bg-orange-600 font-bold", action: () => { closeCustomModal(); endGame(true); } }
+    ]);
+}
+
+async function endGame(forced = false) {
+    if(!userId || globalGameState.status !== 'playing') return;
+    
+    const updates = { status: 'finished' };
+    const endTime = Date.now();
+    
+    // Nếu giáo viên force end, chốt thời gian cho đội chưa xong
+    if (forced) {
+        Object.keys(globalGameState.teams).forEach(tId => {
+            const t = globalGameState.teams[tId];
+            if (t.joined && t.status !== 'finished') {
+                updates[`teams.${tId}.status`] = 'finished';
+                updates[`teams.${tId}.time`] = Math.floor((endTime - globalGameState.startTime) / 1000);
+            }
+        });
+    }
+    
+    await updateDoc(SESSION_DOC_PATH, updates);
+}
+
+function promptResetGame() {
+    document.getElementById('modal-extra').classList.add('hidden');
+    document.getElementById('modal-icon').innerHTML = '⚠️';
+    document.getElementById('modal-title').innerHTML = 'Xóa Bảng Xếp Hạng';
+    document.getElementById('modal-desc').innerHTML = 'Vui lòng nhập mật khẩu để xóa kết quả hiện tại và tạo lượt thi mới.<br><br><input type="password" id="teacher-pwd-reset" class="border-2 border-slate-300 rounded p-2 text-center w-full focus:border-red-500 outline-none" placeholder="Nhập mật khẩu">';
+    
+    document.getElementById('modal-buttons').innerHTML = '';
+    
+    const btnCancel = document.createElement('button');
+    btnCancel.className = "bg-slate-200 text-slate-700 px-4 py-2 rounded font-medium hover:bg-slate-300";
+    btnCancel.innerText = "Hủy";
+    btnCancel.onclick = closeCustomModal;
+
+    const btnConfirm = document.createElement('button');
+    btnConfirm.className = "bg-red-500 text-white px-4 py-2 rounded font-bold hover:bg-red-600";
+    btnConfirm.innerText = "Xác nhận Xóa";
+    btnConfirm.onclick = async () => {
+        const pwd = document.getElementById('teacher-pwd-reset').value;
+        if (pwd === "Giaovien123") {
+            closeCustomModal();
+            await performReset();
+        } else {
+            alert("Mật khẩu chưa đúng."); // Fallback native cho input lỗi nhanh, nhưng yêu cầu hạn chế alert. Sẽ append error
+             const err = document.createElement('p');
+             err.className = "text-red-500 text-sm mt-2";
+             err.innerText = "Mật khẩu chưa đúng.";
+             document.getElementById('modal-desc').appendChild(err);
+        }
+    };
+    
+    document.getElementById('modal-buttons').appendChild(btnCancel);
+    document.getElementById('modal-buttons').appendChild(btnConfirm);
+    
+    document.getElementById('custom-modal').classList.remove('hidden');
+}
+
+async function performReset() {
+    if(!userId) return;
+    const initialState = {
+        status: 'waiting',
+        startTime: null,
+        teams: {
+            team1: { name: 'Đội 1', joined: false, uid: null, score: 0, progress: 0, status: 'waiting', time: 0 },
+            team2: { name: 'Đội 2', joined: false, uid: null, score: 0, progress: 0, status: 'waiting', time: 0 },
+            team3: { name: 'Đội 3', joined: false, uid: null, score: 0, progress: 0, status: 'waiting', time: 0 },
+            team4: { name: 'Đội 4', joined: false, uid: null, score: 0, progress: 0, status: 'waiting', time: 0 }
+        }
+    };
+    await setDoc(SESSION_DOC_PATH, initialState);
+}
+
+// --- LOGIC BẢNG XẾP HẠNG & END SCREEN ---
+function renderEndScreen() {
+    switchScreen('end');
+    
+    // My Stats
+    const myTeam = globalGameState.teams[localState.teamId];
+    document.getElementById('final-score').innerText = myTeam.score;
+    const m = String(Math.floor(myTeam.time / 60)).padStart(2, '0');
+    const s = String(myTeam.time % 60).padStart(2, '0');
+    document.getElementById('final-time').innerText = `${m}:${s}`;
+    
+    renderLeaderboard('final-leaderboard');
+}
+
+function renderLeaderboard(tbodyId) {
+    const tbody = document.getElementById(tbodyId);
+    if (!tbody) return;
+    tbody.innerHTML = '';
+    
+    // Sort logic
+    const teamsArr = Object.values(globalGameState.teams).filter(t => t.joined);
+    teamsArr.sort((a, b) => {
+        if (b.score !== a.score) return b.score - a.score; // Score giảm dần
+        if (a.time !== b.time) return a.time - b.time; // Thời gian tăng dần
+        return 0;
+    });
+
+    let rank = 1;
+    let prevScore = -1;
+    let prevTime = -1;
+    let rankDisplay = 1;
+
+    teamsArr.forEach((t, index) => {
+        if (t.score === prevScore && t.time === prevTime) {
+            // Đồng hạng
+        } else {
+            rankDisplay = index + 1;
+        }
+        prevScore = t.score;
+        prevTime = t.time;
+
+        const isMe = localState.role === 'student' && t.name === globalGameState.teams[localState.teamId]?.name;
+        
+        const tr = document.createElement('tr');
+        tr.className = isMe ? 'bg-blue-50 font-bold' : '';
+        
+        let timeStr = "--:--";
+        if (t.time > 0) {
+            timeStr = `${String(Math.floor(t.time/60)).padStart(2,'0')}:${String(t.time%60).padStart(2,'0')}`;
+        }
+        
+        const rankIcon = rankDisplay === 1 ? '🏆' : rankDisplay === 2 ? '🥈' : rankDisplay === 3 ? '🥉' : rankDisplay;
+
+        // Cột trạng thái chỉ có ở màn hình giáo viên
+        let statusCol = '';
+        if (tbodyId === 'teacher-leaderboard') {
+            statusCol = `<td class="p-3 text-right text-sm ${t.status==='finished' ? 'text-green-600' : 'text-orange-500'}">${t.status==='finished' ? 'Hoàn thành' : 'Đang xử lí'}</td>`;
+        }
+
+        tr.innerHTML = `
+            <td class="p-3 text-lg">${rankIcon}</td>
+            <td class="p-3">${t.name} ${isMe ? '<span class="text-xs text-blue-500">(Bạn)</span>' : ''}</td>
+            <td class="p-3 text-center text-blue-700 text-lg">${t.score}</td>
+            ${tbodyId === 'teacher-leaderboard' ? `<td class="p-3 text-center text-sm">${t.progress}/11</td>` : ''}
+            <td class="p-3 text-center text-orange-600">${timeStr}</td>
+            ${statusCol}
+        `;
+        tbody.appendChild(tr);
+    });
+
+    if (teamsArr.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="5" class="p-4 text-center text-slate-500 italic">Chưa có đội nào tham gia</td></tr>`;
+    }
+}
+
+// --- UTILITIES ---
+function switchScreen(screen) {
+    document.getElementById('lobby-screen').classList.add('hidden');
+    document.getElementById('teacher-screen').classList.add('hidden');
+    document.getElementById('game-screen').classList.add('hidden');
+    document.getElementById('game-screen').classList.remove('flex'); // Tailwind flex class issue
+    document.getElementById('end-screen').classList.add('hidden');
+    
+    if (screen === 'lobby') document.getElementById('lobby-screen').classList.remove('hidden');
+    if (screen === 'teacher') document.getElementById('teacher-screen').classList.remove('hidden');
+    if (screen === 'game') {
+        document.getElementById('game-screen').classList.remove('hidden');
+        document.getElementById('game-screen').classList.add('flex');
+    }
+    if (screen === 'end') document.getElementById('end-screen').classList.remove('hidden');
+}
+
+function showCustomModal(title, desc, buttons, icon = null, extraText = null) {
+    document.getElementById('modal-title').innerHTML = title;
+    document.getElementById('modal-desc').innerHTML = desc;
+    
+    if (icon) {
+        document.getElementById('modal-icon').innerHTML = icon;
+        document.getElementById('modal-icon').classList.remove('hidden');
+    } else {
+        document.getElementById('modal-icon').classList.add('hidden');
+    }
+    
+    const extraEl = document.getElementById('modal-extra');
+    if (extraText) {
+        extraEl.innerHTML = extraText;
+        extraEl.classList.remove('hidden');
+        extraEl.classList.add('block');
+    } else {
+        extraEl.classList.remove('block');
+        extraEl.classList.add('hidden');
+    }
+
+    const btnsDiv = document.getElementById('modal-buttons');
+    btnsDiv.innerHTML = '';
+    buttons.forEach(b => {
+        const btn = document.createElement('button');
+        btn.className = `px-5 py-2.5 rounded-lg transition-transform active:scale-95 ${b.class || 'bg-slate-200'}`;
+        btn.innerText = b.text;
+        btn.onclick = b.action;
+        btnsDiv.appendChild(btn);
+    });
+
+    document.getElementById('custom-modal').classList.remove('hidden');
+    setTimeout(() => {
+        document.getElementById('modal-content').classList.remove('scale-95');
+        document.getElementById('modal-content').classList.add('scale-100');
+    }, 10);
+}
+
+function closeCustomModal() {
+    document.getElementById('modal-content').classList.remove('scale-100');
+    document.getElementById('modal-content').classList.add('scale-95');
+    setTimeout(() => {
+        document.getElementById('custom-modal').classList.add('hidden');
+    }, 200);
+}
+
+// Bắt đầu
+window.onload = () => {
+    initApp();
+};
+
+</script>
+</body>
+</html>
